@@ -8,94 +8,106 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import get_openai_callback
 
-# carrega o .env com a chave da api
+# Carregando as credenciais do ambiente
 load_dotenv()
 
-# Classe pra forçar a saida em json do jeito que pediram no desafio
-class RespostaFinal(BaseModel):
+# Definição da estrutura de dados para garantir que o JSON de saída 
+# siga rigorosamente o padrão exigido no desafio.
+class AnaliseDocumento(BaseModel):
     type: str = Field(default="text")
-    text: str = Field(description="A resposta em markdown com titulos, listas etc")
-    source: str = Field(description="O nome do arquivo pdf lido")
-    suggestions: list[str] = Field(description="3 perguntas de acompanhamento sobre o texto")
+    text: str = Field(description="Conteúdo da resposta formatado em Markdown")
+    source: str = Field(description="Nome do arquivo PDF processado")
+    suggestions: list[str] = Field(description="Lista com exatamente 3 perguntas de acompanhamento")
 
-def ler_arquivo_pdf(caminho):
-    #  [ensei em usar o fitz (pymupdf) para ler o texto pq achei mais rapido
-    # nos meus testes antes, mas o PyPDFLoader resolveu bem pra esse caso.
-    loader = PyPDFLoader(caminho)
-    paginas = loader.load()
-    
-    texto = ""
-    for pagina in paginas:
-        # pegando o texto de cada pagina e quebrando linha
-        texto += pagina.page_content + "\n"
+def extrair_texto_pdf(caminho_arquivo):
+    """
+    Realiza a leitura do PDF e extrai o conteúdo textual. 
+    Optei pelo PyPDFLoader pela facilidade de integração com o ecossistema LangChain.
+    """
+    if not os.path.exists(caminho_arquivo):
+        return None, "Arquivo não encontrado."
+
+    try:
+        loader = PyPDFLoader(caminho_arquivo)
+        paginas = loader.load()
         
-    # pega só o nome do arquivo no final do caminho, ex: relatorio.pdf
-    nome_arquivo = os.path.basename(caminho)
-    
-    return texto, nome_arquivo
+        # Consolida o texto de todas as páginas em uma única string
+        conteudo_completo = "\n".join([p.page_content for p in paginas])
+        nome_arquivo = os.path.basename(caminho_arquivo)
+        
+        return conteudo_completo, nome_arquivo
+    except Exception as e:
+        return None, str(e)
 
 if __name__ == "__main__":
-    # Checa se passou o arquivo e a pergunta no terminal
+    # Validação básica de argumentos via linha de comando
     if len(sys.argv) != 3:
-        erro = {"error": "Faltou argumento! Passa o caminho do arquivo e a pergunta entre aspas."}
-        print(json.dumps(erro))
+        mensagem_erro = {
+            "error": "Argumentos inválidos! Use: python analisador.py 'caminho/do/arquivo.pdf' 'Sua pergunta'"
+        }
+        print(json.dumps(mensagem_erro))
         sys.exit(1)
 
-    arquivo_pdf = sys.argv[1]
+    caminho_pdf = sys.argv[1]
     pergunta_usuario = sys.argv[2]
 
-    if not os.path.exists(arquivo_pdf):
-        print(json.dumps({"error": "Pdf não encontrado no caminho informado."}))
+    # Processamento inicial do documento
+    texto_doc, info_pdf = extrair_texto_pdf(caminho_pdf)
+
+    if texto_doc is None:
+        print(json.dumps({"error": f"Erro ao ler o PDF: {info_pdf}"}))
         sys.exit(1)
 
     try:
-        conteudo_pdf, nome_do_pdf = ler_arquivo_pdf(arquivo_pdf)
-        
-        # print("debug: carregou", len(conteudo_pdf), "caracteres do pdf") 
-        
-        # configurando a IA
+        # Configuração do modelo de linguagem. 
         llm = ChatOpenAI(
-            model="openai/gpt-4o-mini", # Voltamos pro modelo super estável das suas aulas!
+            model="openai/gpt-4o-mini",
             temperature=0.2,
-            max_tokens=1500, # Mantemos a trava pra OpenRouter aprovar seu saldo
-            api_key=os.getenv("OPENROUTER_API_KEY"), 
-            base_url="https://openrouter.ai/api/v1"  
+            max_tokens=1500,
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            base_url="https://openrouter.ai/api/v1"
         )
-        
-        # Aqui é o segredo pra garantir que a resposta não vaze texto fora do JSON
-        llm_estruturado = llm.with_structured_output(RespostaFinal)
 
-        # Prompt mais direto e simples
-        meu_prompt = """Você é um assistente de análise de dados. Leia o documento e responda a pergunta.
-        
-        Importante:
-        1. O campo 'text' tem que ser formatado em Markdown (use negrito, listas e títulos ##).
-        2. O campo 'source' tem que ser EXATAMENTE o nome do documento.
-        3. Crie 3 perguntas relevantes para o campo 'suggestions'.
+        # Forçamos o modelo a respeitar o esquema do Pydantic (Structured Output)
+        llm_estruturado = llm.with_structured_output(AnaliseDocumento)
 
-        DOCUMENTO ({nome_do_pdf}):
-        {texto_do_documento}
+        # Definição do comportamento da IA através do prompt
+        instrucao_prompt = """Você é um analista de dados especialista. 
+        Sua tarefa é ler o documento fornecido e responder à pergunta do usuário.
 
-        PERGUNTA DO USUÁRIO: {pergunta_usuario}
+        Regras de Resposta:
+        1. O campo 'text' deve ser um Markdown limpo (use títulos ##, negrito e listas).
+        2. O campo 'source' deve ser o nome exato do arquivo analisado.
+        3. O campo 'suggestions' deve conter 3 perguntas relevantes para aprofundar a análise.
+
+        DOCUMENTO: {nome_do_arquivo}
+        CONTEÚDO: {conteudo_texto}
+
+        PERGUNTA: {pergunta}
         """
-        
-        prompt_template = ChatPromptTemplate.from_template(meu_prompt)
+
+        prompt_template = ChatPromptTemplate.from_template(instrucao_prompt)
         chain = prompt_template | llm_estruturado
-        
-        # Bônus do desafio: calculando o custo da chamada
-        with get_openai_callback() as custo:
-            resposta_ia = chain.invoke({
-                "nome_do_pdf": nome_do_pdf,
-                "texto_do_documento": conteudo_pdf,
-                "pergunta_usuario": pergunta_usuario
+
+        # Execução com monitoramento de custos (tokens e valores)
+        with get_openai_callback() as monitor_custo:
+            resultado = chain.invoke({
+                "nome_do_arquivo": info_pdf,
+                "conteudo_texto": texto_doc,
+                "pergunta": pergunta_usuario
             })
-            
-            # jogo o print do custo no stderr pra não quebrar a formatação do json no stdout
-            sys.stderr.write(f"\n---> Bônus (Custo) <--- \nTokens totais: {custo.total_tokens}\nCusto estimado: ${custo.total_cost:.6f}\n\n")
 
-        # Retorna o json lindão na tela
-        print(resposta_ia.model_dump_json(indent=2))
+            # Imprimimos os dados de custo no stderr para não "sujar" o stdout, 
+            # mantendo o JSON de saída puro para o sistema que for consumir.
+            sys.stderr.write(
+                f"\n--- LOG DE EXECUÇÃO ---\n"
+                f"Tokens Utilizados: {monitor_custo.total_tokens}\n"
+                f"Custo Estimado: ${monitor_custo.total_cost:.6f}\n\n"
+            )
 
-    except Exception as erro:
-        print(json.dumps({"error": f"Deu erro na execução: {str(erro)}"}))
+        # Saída final em JSON formatado conforme o requisito obrigatório
+        print(resultado.model_dump_json(indent=2))
+
+    except Exception as erro_geral:
+        print(json.dumps({"error": f"Erro interno na execução: {str(erro_geral)}"}))
         sys.exit(1)
