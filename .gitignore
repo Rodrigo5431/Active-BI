@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambientes Virtuais
+venv/
+.venv/
+env/
+bin/
+include/
+lib/
+share/
+pyvenv.cfg
+
+# Variáveis de Ambiente
+.env
+.env.local
+.env.*
+
+# Arquivos Temporários e PDFs
+*.pdf
+!Exemplo_Para_Teste.pdf
+temp.pdf
+
+# IDEs e Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Streamlit (se for usar a interface que você estudou)
+.streamlit/
