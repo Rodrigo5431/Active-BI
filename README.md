@@ -5,17 +5,15 @@ Ferramenta desenvolvida em Python que permite analisar relatórios em PDF atrav�
 ## 🚀 Como Executar
 
 1. Clone este repositório:
-   `git clone https://github.com/Rodrigo5431/Active-BI.git`
+   `git clone https://github.com/SeuUsuario/Active-BI.git`
 2. Crie um ambiente virtual e ative-o:
    `python -m venv venv`
    * **Windows:** `venv\Scripts\activate`
    * **Linux/Mac:** `source venv/bin/activate`
 3. Instale as dependências necessárias:
    `pip install -r requirements.txt`
-4. Crie um arquivo `.env` na raiz do projeto e adicione a chave de API:
-   `OPENROUTER_API_KEY=sk-or-v1-suachaveaqui`
-   
-   *(Nota: Para os testes de desenvolvimento, configurei a aplicação utilizando o endpoint do OpenRouter para acessar o modelo da OpenAI de forma otimizada. A arquitetura via LangChain permite voltar para a chave nativa `OPENAI_API_KEY` mudando apenas uma linha no código).*
+4. Crie um arquivo `.env` na raiz do projeto e adicione a sua chave da API da OpenAI:
+   `OPENAI_API_KEY=sk-suachaveaqui`
 
 ### 💻 Modo CLI (Requisito Principal do Desafio)
 Execute o script passando o caminho do PDF e a pergunta (entre aspas). A saída será estritamente um JSON válido:
