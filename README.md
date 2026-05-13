@@ -5,7 +5,7 @@ Ferramenta desenvolvida em Python que permite analisar relatórios em PDF atrav�
 ## 🚀 Como Executar
 
 1. Clone este repositório:
-   `git clone https://github.com/SeuUsuario/Active-BI.git`
+   `git clone https://github.com/Rodrigo5431/Active-BI.git`
 2. Crie um ambiente virtual e ative-o:
    `python -m venv venv`
    * **Windows:** `venv\Scripts\activate`
