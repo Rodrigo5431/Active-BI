@@ -9,10 +9,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import get_openai_callback
 
-# Carregando as configurações do .env
 load_dotenv()
 
-# Estrutura de dados para validar o JSON da IA
+# Estrutura de dados para validar o JSON
 class ResultadoAnalise(BaseModel):
     type: str = Field(default="text")
     text: str = Field(description="Resposta formatada em markdown")
@@ -44,7 +43,7 @@ with st.sidebar:
             f.write(meu_arquivo.getbuffer())
         st.success("PDF carregado!")
 
-# Entrada do usuário
+# entrada do usuário
 pergunta = st.text_input("O que você deseja saber?", placeholder="Ex: Qual o resumo deste documento?")
 
 if st.button("Analisar PDF"):
@@ -56,12 +55,12 @@ if st.button("Analisar PDF"):
         try:
             with st.spinner("Processando..."):
                 
-                # Leitura do documento
+                # leitura do documento
                 loader = PyPDFLoader("temp.pdf")
                 paginas = loader.load()
                 texto_completo = "\n".join([p.page_content for p in paginas])
                 
-                # Setup do modelo
+                # setup do modelo
                 llm = ChatOpenAI(
                     model="gpt-4o-mini",
                     temperature=0.2,
@@ -86,7 +85,7 @@ if st.button("Analisar PDF"):
                 prompt = ChatPromptTemplate.from_template(prompt_base)
                 chain = prompt | llm_json
                 
-                # Execução capturando os custos (Bônus do desafio)
+                #capturando os custos
                 with get_openai_callback() as monitor_custo:
                     resposta = chain.invoke({
                         "nome_arquivo": meu_arquivo.name,
@@ -94,7 +93,7 @@ if st.button("Analisar PDF"):
                         "pergunta": pergunta
                     })
 
-                # --- Exibição dos Resultados ---
+                #exibição dos Resultados
                 col_esq, col_dir = st.columns([2, 1])
                 
                 with col_esq:
@@ -115,7 +114,7 @@ if st.button("Analisar PDF"):
                         st.write(f"- {sug}")
 
                 with col_dir:
-                    # Seção de Métricas de Custo
+                    # Custos
                     st.info("### 💰 Custos da Chamada")
                     m_col1, m_col2 = st.columns(2)
                     m_col1.metric("Tokens", monitor_custo.total_tokens)
