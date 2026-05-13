@@ -7,125 +7,127 @@ from pydantic import BaseModel, Field
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_community.callbacks import get_openai_callback
 
-# puxa as chaves do arquivo .env
+# Carregando as configurações do .env
 load_dotenv()
 
-# Estrutura obrigatória para o JSON de saída 
+# Estrutura de dados para validar o JSON da IA
 class ResultadoAnalise(BaseModel):
     type: str = Field(default="text")
     text: str = Field(description="Resposta formatada em markdown")
     source: str = Field(description="Nome do documento analisado")
     suggestions: list[str] = Field(description="3 sugestões de perguntas")
 
-# Configurações visuais da página
+# Configuração da página
 st.set_page_config(page_title="Analisador Active-BI", page_icon="📊", layout="wide")
 
-# CSS rápido para deixar o botão principal com uma cara melhor
+# Estilo para o botão e áreas de métricas
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
+    .metric-container { background-color: #ffffff; padding: 10px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 Analisador de Relatórios (Desafio)")
+st.title("📊 Analisador de Relatórios (Active-BI)")
 
-# Barra lateral para configurações e upload
+# Barra lateral para upload
 with st.sidebar:
     st.header("⚙️ Configurações")
-    st.write("Interface bônus desenvolvida para o desafio.")
+    st.write("Interface desenvolvida para o desafio técnico.")
     
-    # Input do arquivo PDF 
-    meu_arquivo = st.file_uploader("Arraste seu PDF aqui", type="pdf")
+    meu_arquivo = st.file_uploader("Suba o PDF aqui", type="pdf")
     
     if meu_arquivo:
-        # Salvando o arquivo temporariamente para o loader conseguir ler 
         with open("temp.pdf", "wb") as f:
             f.write(meu_arquivo.getbuffer())
-        st.success("Arquivo carregado com sucesso!")
+        st.success("PDF carregado!")
 
-# Entrada da pergunta do usuário
-pergunta = st.text_input("O que você deseja saber sobre este documento?", placeholder="Ex: Faça um resumo dos pontos principais")
+# Entrada do usuário
+pergunta = st.text_input("O que você deseja saber?", placeholder="Ex: Qual o resumo deste documento?")
 
 if st.button("Analisar PDF"):
     if not meu_arquivo:
-        st.error("Por favor, carregue um PDF antes de continuar.")
+        st.error("Por favor, selecione um arquivo PDF.")
     elif not pergunta:
-        st.warning("Você precisa digitar uma pergunta para a IA.")
+        st.warning("A pergunta não pode estar vazia.")
     else:
         try:
-            with st.spinner("Analisando o documento..."):
+            with st.spinner("Processando..."):
                 
-                # Extraindo o texto do PDF carregado 
+                # Leitura do documento
                 loader = PyPDFLoader("temp.pdf")
                 paginas = loader.load()
                 texto_completo = "\n".join([p.page_content for p in paginas])
                 
                 # Setup do modelo
                 llm = ChatOpenAI(
-                    model="openai/gpt-4o-mini",
+                    model="gpt-4o-mini",
                     temperature=0.2,
-                    max_tokens=1500,
-                    api_key=os.getenv("OPENROUTER_API_KEY"),
-                    base_url="https://openrouter.ai/api/v1"
+                    api_key=os.getenv("OPENAI_API_KEY")
                 )
                 
-                # Forçando a saída estruturada via Pydantic 
-                llm_estruturado = llm.with_structured_output(ResultadoAnalise)
+                llm_json = llm.with_structured_output(ResultadoAnalise)
                 
-                # Prompt simulando o papel de analista de BI
-                prompt_base = """Você é um analista de BI experiente auxiliando um cliente.
-                Utilize o contexto abaixo para responder a pergunta de forma precisa.
+                prompt_base = """Você é um analista de BI ajudando um cliente.
+                Responda com base no contexto abaixo.
                 
-                Regras obrigatórias:
-                - Resposta sempre em Markdown (use títulos, listas e negrito).
-                - Identifique o nome correto do arquivo no campo 'source'.
-                - Gere exatamente 3 perguntas complementares no campo 'suggestions'.
+                Regras:
+                1. Resposta em Markdown (use títulos ## e negrito).
+                2. 'source' deve ser o nome do arquivo.
+                3. 'suggestions' deve ter 3 perguntas relevantes.
                 
-                DOCUMENTO: {nome_arquivo}
-                CONTEXTO: {contexto}
+                ARQUIVO: {nome_arquivo}
+                CONTEÚDO: {contexto}
                 PERGUNTA: {pergunta}
                 """
                 
                 prompt = ChatPromptTemplate.from_template(prompt_base)
-                chain = prompt | llm_estruturado
+                chain = prompt | llm_json
                 
-                # Chamada para o modelo
-                resposta = chain.invoke({
-                    "nome_arquivo": meu_arquivo.name,
-                    "contexto": texto_completo,
-                    "pergunta": pergunta
-                })
+                # Execução capturando os custos (Bônus do desafio)
+                with get_openai_callback() as monitor_custo:
+                    resposta = chain.invoke({
+                        "nome_arquivo": meu_arquivo.name,
+                        "contexto": texto_completo,
+                        "pergunta": pergunta
+                    })
 
-                # Organização da exibição em colunas
+                # --- Exibição dos Resultados ---
                 col_esq, col_dir = st.columns([2, 1])
                 
                 with col_esq:
-                    st.success("Processamento finalizado!")
-                    st.markdown("### 📝 Resposta do Analista")
+                    st.success("Análise finalizada!")
+                    st.markdown("### 📝 Resposta")
                     
-                    # Efeito de digitação (streaming visual)
-                    placeholder = st.empty()
+                    # Efeito de digitação fluida
+                    caixa_texto = st.empty()
                     texto_acumulado = ""
                     for pedaco in resposta.text.split(" "):
                         texto_acumulado += pedaco + " "
-                        placeholder.markdown(texto_acumulado)
-                        time.sleep(0.04) # velocidade do efeito
+                        caixa_texto.markdown(texto_acumulado)
+                        time.sleep(0.03)
                     
                     st.markdown("---")
-                    st.markdown("### 💡 Próximos Passos")
+                    st.markdown("### 💡 Sugestões")
                     for sug in resposta.suggestions:
                         st.write(f"- {sug}")
 
                 with col_dir:
-                    st.info("📦 JSON de Saída")
-                    # Exibe o JSON
+                    # Seção de Métricas de Custo
+                    st.info("### 💰 Custos da Chamada")
+                    m_col1, m_col2 = st.columns(2)
+                    m_col1.metric("Tokens", monitor_custo.total_tokens)
+                    m_col2.metric("Custo (USD)", f"${monitor_custo.total_cost:.4f}")
+                    
+                    st.markdown("---")
+                    st.info("### 📦 JSON Gerado")
                     st.json(resposta.model_dump())
-                    st.caption(f"Arquivo de origem: {resposta.source}")
+                    st.caption(f"Fonte: {resposta.source}")
 
         except Exception as e:
-            st.error(f"Erro inesperado: {str(e)}")
+            st.error(f"Erro na análise: {str(e)}")
         finally:
-            # Limpeza do arquivo temporário
             if os.path.exists("temp.pdf"):
                 os.remove("temp.pdf")
